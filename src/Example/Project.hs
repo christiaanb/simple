@@ -1,7 +1,7 @@
 -- @createDomain@ below generates a warning about orphan instances, but we like
 -- our code to be warning-free.
 {-# OPTIONS_GHC -Wno-orphans -O0 -fno-omit-interface-pragmas #-}
-{-# LANGUAGE BlockArguments, DeriveFunctor, GADTs #-}
+{-# LANGUAGE BlockArguments, DeriveFunctor, GADTs, DeriveGeneric, FlexibleInstances #-}
 
 {-# OPTIONS -fplugin=Protocols.Plugin #-}
 
@@ -9,6 +9,7 @@ module Example.Project where
 
 import Clash.Explicit.Prelude
 
+import GHC.Generics
 
 myFoldl :: forall b a . (b -> a -> b) -> b -> [a] -> b
 myFoldl f = go
@@ -73,6 +74,16 @@ data Configuration where
     {accum1Conf :: Unsigned n
     ,accum2Conf :: Unsigned n
     } -> Configuration
+
+
+data MyMaybeX a = NothingX | JustX { fromX :: a }
+  deriving Generic
+
+class ShowRep f where
+  showRep :: Show (f a) => f a -> String
+
+instance (Constructor c) => ShowRep (M1 i c f) where
+  showRep x = show (conName x) <> show x
 
 -- | @topEntity@ is Clash@s equivalent of @main@ in other programming languages.
 -- Clash will look for it when compiling "Example.Project" and translate it to
