@@ -2,12 +2,14 @@
 -- our code to be warning-free.
 {-# OPTIONS_GHC -Wno-orphans -O0 -fno-omit-interface-pragmas #-}
 {-# LANGUAGE BlockArguments, DeriveFunctor, GADTs, DeriveGeneric, FlexibleInstances #-}
+{-# LANGUAGE PartialTypeSignatures #-}
 
 {-# OPTIONS -fplugin=Protocols.Plugin #-}
 
 module Example.Project where
 
 import Clash.Explicit.Prelude
+import qualified Clash.Signal.Delayed.Bundle as D
 
 import GHC.Generics
 
@@ -67,11 +69,15 @@ createDomain vSystem{vName="Dom50", vPeriod=hzToPeriod 50e6}
 --   , accum2conf :: Unsigned n
 --   }
 
+data Target
+  = ASIC | FPGA
+
 data Configuration where
   Configuration ::
     forall n .
     KnownNat n =>
-    {accum1Conf :: Unsigned n
+    {targetInfo :: Target
+    ,accum1Conf :: Unsigned n
     ,accum2Conf :: Unsigned n
     } -> Configuration
 
@@ -100,7 +106,41 @@ topEntity ::
   Enable Dom50 ->
   Signal Dom50 Word ->
   Signal Dom50 Word
-topEntity = topLevel (Configuration (0 :: Unsigned 8) 0)
+topEntity clk rst ena =
+  blockRam clk ena (replicate d1024 0) rd .
+  liftA2 toMaybe wen .
+  liftA2 (,) wr .
+  topLevel (Configuration ASIC (0 :: Unsigned 8) 0) clk rst (andEnable ena (fmap not wen))
+ where
+  -- ena :: Enable Dom50
+  -- ena = enableGen
+
+  rd :: Signal Dom50 Int
+  rd = register clk rst ena 0 (rd + 1)
+
+  wen :: Signal Dom50 Bool
+  wen = register clk rst ena True (not <$> wen)
+
+  wr :: Signal Dom50 Int
+  wr = xyz `hwSeqX` register clk rst ena 1024 (wr - 1)
+
+  toMaybe :: Bool -> a -> Maybe a
+  toMaybe False _ = Nothing
+  toMaybe _ a = Just a
+
+  xyz :: Signal Dom50 (Vec 1024 (BitVector 32))
+  xyz = register clk rst ena undefined xyz
+
+dsignalExample ::
+  forall d .
+  Clock Dom50 ->
+  Vec 8 (DSignal Dom50 d Word) ->
+  DSignal Dom50 d Bool ->
+  DSignal Dom50 (d + 3) (Word,Bool)
+dsignalExample clk vec valid = D.bundle
+  ( delayedFold d1 undefined (+) enableGen clk vec
+  , delayI False enableGen clk valid
+  )
 
 type Accumulator dom n =
   (KnownDomain dom, KnownNat n) =>
@@ -117,7 +157,7 @@ topLevel ::
   Enable Dom50 ->
   Signal Dom50 Word ->
   Signal Dom50 Word
-topLevel (Configuration c1 c2) clk rst ena inp =
+topLevel (Configuration _ c1 c2) clk rst ena inp =
   setName @"foo" (accum c1) clk rst ena
   (setName @"bar" (accum c2) clk rst ena inp)
 
