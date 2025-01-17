@@ -142,6 +142,14 @@ dsignalExample clk vec valid = D.bundle
   , delayI False enableGen clk valid
   )
 
+medvedevDSignal ::
+  (KnownDomain dom, NFDataX b) =>
+  Clock dom -> b -> DSignal dom n a -> (a -> b) -> DSignal dom (n + 1) b
+medvedevDSignal clk initialState input0 transition = out
+ where
+  out = delayN d1 initialState enableGen clk d
+  d   = fmap transition input0
+
 type Accumulator dom n =
   (KnownDomain dom, KnownNat n) =>
   Clock dom ->

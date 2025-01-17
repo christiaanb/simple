@@ -88,6 +88,7 @@ library
   hs-source-dirs: src
   exposed-modules:
     Example.Project
+    Example.Protocols
   default-language: Haskell2010
 
 -- Builds the executable 'clash', with simple project in scope
